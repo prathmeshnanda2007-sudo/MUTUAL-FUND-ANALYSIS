@@ -46,6 +46,12 @@ cvxpy>=1.5.2
 pathlib2>=2.3.7.post1
 tqdm>=4.66.4
 
+# PDF Report Generation
+fpdf2>=2.7.9
+
+# Testing
+pytest>=8.2.0
+
 # API Backend / Auth (FastAPI)
 fastapi
 uvicorn

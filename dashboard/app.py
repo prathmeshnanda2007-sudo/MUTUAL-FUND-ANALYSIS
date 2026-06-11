@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
 import sys
+import numpy as np
 from sqlalchemy import create_engine, text
 
 # Configure Streamlit page
@@ -52,6 +53,29 @@ custom_css = """
         background-color: rgba(255,255,255,0.03);
         border: 1px solid rgba(255,255,255,0.1);
         border-radius: 8px;
+    }
+
+    /* Scorecard progress bars */
+    .scorecard-bar {
+        background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+        height: 8px;
+        border-radius: 4px;
+        margin-top: 2px;
+    }
+
+    /* Recommendation cards */
+    .rec-card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .rec-card:hover {
+        border-color: rgba(59, 130, 246, 0.3);
+        background: rgba(255, 255, 255, 0.05);
     }
 </style>
 """
@@ -120,6 +144,22 @@ def load_data(query: str, params: dict = None):
 def get_funds_list():
     return load_data("SELECT amfi_code, scheme_name, fund_house, category, risk_grade FROM dim_fund")
 
+@st.cache_data
+def compute_metrics_cached():
+    """Compute all financial metrics (cached for session performance)."""
+    nav_df = load_data("SELECT amfi_code, date, nav FROM fact_nav WHERE date >= '2023-01-01'")
+    nav_df['date'] = pd.to_datetime(nav_df['date'])
+    nav_df = nav_df.drop_duplicates(subset=['date', 'amfi_code'])
+    nav_pivot = nav_df.pivot(index='date', columns='amfi_code', values='nav').ffill()
+    
+    bm_df = load_data("SELECT as_of_date as date, close_value as nav FROM fact_benchmark WHERE index_name = 'NIFTY100' AND as_of_date >= '2023-01-01'")
+    bm_df['date'] = pd.to_datetime(bm_df['date'])
+    bm_series = bm_df.set_index('date')['nav'].ffill()
+    
+    funds_df = get_funds_list()
+    metrics_df = compute_all_metrics(nav_pivot, bm_series, funds_df)
+    return metrics_df
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  UI LAYOUT & NAVIGATION
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -134,7 +174,9 @@ page = st.sidebar.radio(
         "Market Overview", 
         "Fund Performance & Risk", 
         "Investor Demographics & Transactions", 
-        "Portfolio Holdings & Sector Exposure"
+        "Portfolio Holdings & Sector Exposure",
+        "Fund Scorecard & Rankings",
+        "Smart Fund Recommender",
     ]
 )
 
@@ -192,18 +234,8 @@ elif page == "Fund Performance & Risk":
     st.title("⚖️ Fund Performance & Risk")
     st.markdown("Evaluate risk-adjusted returns, Drawdowns, Alpha ranking, and Beta comparisons.")
     
-    with st.spinner("Computing metrics from SQLite..."):
-        nav_df = load_data("SELECT amfi_code, date, nav FROM fact_nav WHERE date >= '2023-01-01'")
-        nav_df['date'] = pd.to_datetime(nav_df['date'])
-        nav_df = nav_df.drop_duplicates(subset=['date', 'amfi_code'])
-        nav_pivot = nav_df.pivot(index='date', columns='amfi_code', values='nav').ffill()
-        
-        bm_df = load_data("SELECT as_of_date as date, close_value as nav FROM fact_benchmark WHERE index_name = 'NIFTY100' AND as_of_date >= '2023-01-01'")
-        bm_df['date'] = pd.to_datetime(bm_df['date'])
-        bm_series = bm_df.set_index('date')['nav'].ffill()
-        
-        funds_df = get_funds_list()
-        metrics_df = compute_all_metrics(nav_pivot, bm_series, funds_df)
+    with st.spinner("Computing metrics from database..."):
+        metrics_df = compute_metrics_cached()
     
     c1, c2 = st.columns(2)
     with c1:
@@ -307,6 +339,394 @@ elif page == "Portfolio Holdings & Sector Exposure":
         sector_grp = holdings_df.groupby('sector')['weight_pct'].sum().reset_index().sort_values('weight_pct', ascending=False)
         fig_sec = px.treemap(sector_grp, path=[px.Constant("All Sectors"), 'sector'], values='weight_pct', title="Sector Allocation Treemap")
         st.plotly_chart(fig_sec, use_container_width=True)
+
+
+# -------------------------------------------------------------------------------
+# PAGE 5: Fund Scorecard & Rankings
+# -------------------------------------------------------------------------------
+elif page == "Fund Scorecard & Rankings":
+    st.title("🏆 Fund Scorecard & Rankings")
+    st.markdown("Composite scoring (0-100) across returns, risk, alpha, expense ratio, and drawdown for all tracked funds.")
+    
+    with st.spinner("Computing fund scorecards..."):
+        metrics_df = compute_metrics_cached()
+    
+    if metrics_df.empty:
+        st.warning("No metrics data available. Please run the pipeline first.")
+    else:
+        # Top-level KPIs
+        st.subheader("Leaderboard Highlights")
+        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+        
+        top_fund = metrics_df.iloc[0] if not metrics_df.empty else None
+        if top_fund is not None:
+            kpi1.metric("🥇 Top Rated Fund", top_fund.get('scheme_name', 'N/A')[:30], f"Score: {top_fund.get('scorecard', 0):.1f}")
+            
+        avg_sharpe = metrics_df['sharpe_ratio'].mean() if 'sharpe_ratio' in metrics_df.columns else 0
+        kpi2.metric("Avg Sharpe Ratio", f"{avg_sharpe:.3f}", "Universe Average")
+        
+        avg_alpha = metrics_df['alpha'].mean() if 'alpha' in metrics_df.columns else 0
+        kpi3.metric("Avg Alpha", f"{avg_alpha:.4f}", "vs Nifty 100")
+        
+        total_funds = len(metrics_df)
+        kpi4.metric("Funds Analyzed", str(total_funds), "Full Universe")
+        
+        st.markdown("---")
+        
+        # Filters
+        filter_col1, filter_col2 = st.columns(2)
+        with filter_col1:
+            categories = ['All'] + sorted(metrics_df['category'].dropna().unique().tolist()) if 'category' in metrics_df.columns else ['All']
+            selected_category = st.selectbox("Filter by Category:", categories)
+        with filter_col2:
+            risk_grades = ['All'] + sorted(metrics_df['risk_grade'].dropna().unique().tolist()) if 'risk_grade' in metrics_df.columns else ['All']
+            selected_risk = st.selectbox("Filter by Risk Grade:", risk_grades)
+        
+        filtered_df = metrics_df.copy()
+        if selected_category != 'All' and 'category' in filtered_df.columns:
+            filtered_df = filtered_df[filtered_df['category'] == selected_category]
+        if selected_risk != 'All' and 'risk_grade' in filtered_df.columns:
+            filtered_df = filtered_df[filtered_df['risk_grade'] == selected_risk]
+        
+        # Scorecard visualization
+        st.subheader(f"Scorecard Rankings ({len(filtered_df)} funds)")
+        
+        c1, c2 = st.columns([3, 2])
+        
+        with c1:
+            # Horizontal bar chart of scorecard
+            display_df = filtered_df.head(20).sort_values('scorecard', ascending=True)
+            
+            fig_score = go.Figure()
+            
+            # Color-code by scorecard value
+            colors = []
+            for score in display_df['scorecard']:
+                if score >= 75:
+                    colors.append('#22c55e')  # Green
+                elif score >= 50:
+                    colors.append('#3b82f6')  # Blue
+                elif score >= 25:
+                    colors.append('#f59e0b')  # Amber
+                else:
+                    colors.append('#ef4444')  # Red
+            
+            fig_score.add_trace(go.Bar(
+                x=display_df['scorecard'],
+                y=display_df['scheme_name'].str[:40],
+                orientation='h',
+                marker_color=colors,
+                text=display_df['scorecard'].round(1),
+                textposition='outside',
+                hovertemplate='<b>%{y}</b><br>Score: %{x:.1f}<extra></extra>'
+            ))
+            
+            fig_score.update_layout(
+                title="Fund Scorecard (0-100)",
+                xaxis_title="Composite Score",
+                yaxis_title="",
+                height=max(400, len(display_df) * 30),
+                margin=dict(l=10, r=50),
+                xaxis=dict(range=[0, 110])
+            )
+            st.plotly_chart(fig_score, use_container_width=True)
+        
+        with c2:
+            # Scoring methodology
+            st.markdown("#### 📐 Scoring Methodology")
+            st.markdown("""
+            The composite score (0-100) is computed as a weighted rank percentile:
+            
+            | Factor | Weight |
+            |--------|--------|
+            | 3-Year CAGR Return | 30% |
+            | Sharpe Ratio | 25% |
+            | Alpha (vs benchmark) | 20% |
+            | Expense Ratio (lower = better) | 15% |
+            | Max Drawdown (lower = better) | 10% |
+            
+            **Legend:**
+            - 🟢 **75-100**: Elite performers
+            - 🔵 **50-74**: Strong performers  
+            - 🟡 **25-49**: Average performers
+            - 🔴 **0-24**: Underperformers
+            """)
+        
+        st.markdown("---")
+        
+        # Full sortable table
+        st.subheader("Full Metrics Table")
+        
+        display_cols = []
+        for col in ['scheme_name', 'fund_house', 'category', 'risk_grade', 'scorecard',
+                     'cagr_1yr', 'cagr_3yr', 'sharpe_ratio', 'sortino_ratio', 'alpha', 'beta',
+                     'max_drawdown', 'var_95', 'annual_vol', 'expense_ratio']:
+            if col in filtered_df.columns:
+                display_cols.append(col)
+        
+        table_df = filtered_df[display_cols].copy()
+        
+        # Format numeric columns
+        numeric_cols = ['scorecard', 'cagr_1yr', 'cagr_3yr', 'sharpe_ratio', 'sortino_ratio', 
+                        'alpha', 'beta', 'max_drawdown', 'var_95', 'annual_vol', 'expense_ratio']
+        for col in numeric_cols:
+            if col in table_df.columns:
+                table_df[col] = table_df[col].round(4)
+        
+        # Rename columns for display
+        rename_map = {
+            'scheme_name': 'Fund Name',
+            'fund_house': 'AMC',
+            'category': 'Category',
+            'risk_grade': 'Risk',
+            'scorecard': 'Score',
+            'cagr_1yr': 'CAGR 1Y',
+            'cagr_3yr': 'CAGR 3Y',
+            'sharpe_ratio': 'Sharpe',
+            'sortino_ratio': 'Sortino',
+            'alpha': 'Alpha',
+            'beta': 'Beta',
+            'max_drawdown': 'Max DD',
+            'var_95': 'VaR 95%',
+            'annual_vol': 'Ann. Vol',
+            'expense_ratio': 'Exp. Ratio'
+        }
+        table_df = table_df.rename(columns=rename_map)
+        
+        st.dataframe(
+            table_df,
+            use_container_width=True,
+            height=500,
+            hide_index=True,
+        )
+        
+        # Download button
+        csv = filtered_df.to_csv(index=False)
+        st.download_button(
+            label="📥 Download Full Scorecard (CSV)",
+            data=csv,
+            file_name="bluestock_fund_scorecard.csv",
+            mime="text/csv"
+        )
+
+
+# -------------------------------------------------------------------------------
+# PAGE 6: Smart Fund Recommender
+# -------------------------------------------------------------------------------
+elif page == "Smart Fund Recommender":
+    st.title("🤖 Smart Fund Recommender")
+    st.markdown("Get personalized fund recommendations based on your risk appetite and investment preferences.")
+    
+    # Risk profile selector
+    st.subheader("1️⃣ Select Your Risk Profile")
+    
+    risk_descriptions = {
+        "Low": "**Conservative** — Capital preservation focused. Suitable for debt, liquid, and gilt funds with minimal volatility.",
+        "Moderate": "**Balanced** — Steady growth with controlled risk. Ideal for bluechip large-cap and balanced advantage funds.",
+        "High": "**Aggressive** — Maximum growth potential. Targets mid-cap, small-cap, and thematic funds with higher volatility."
+    }
+    
+    risk_choice = st.radio(
+        "Choose your risk appetite:",
+        list(risk_descriptions.keys()),
+        index=1,
+        horizontal=True,
+    )
+    
+    st.info(risk_descriptions[risk_choice])
+    
+    # Optional investment amount
+    st.subheader("2️⃣ Investment Details (Optional)")
+    col_amt, col_mode = st.columns(2)
+    with col_amt:
+        investment_amount = st.number_input("Investment Amount (₹)", min_value=500, max_value=10000000, value=50000, step=5000)
+    with col_mode:
+        investment_mode = st.selectbox("Investment Mode", ["SIP (Monthly)", "Lumpsum (One-time)"])
+    
+    # Number of recommendations
+    top_n = st.slider("Number of Recommendations", min_value=3, max_value=10, value=5)
+    
+    st.markdown("---")
+    
+    # Run recommender
+    if st.button("🚀 Get Recommendations", type="primary", use_container_width=True):
+        with st.spinner("Analyzing funds and computing risk-adjusted scores..."):
+            # Risk appetite to risk_grade mapping
+            RISK_MAP = {
+                "Low":      ["Low", "Moderately Low"],
+                "Moderate": ["Moderate", "Moderately High"],
+                "High":     ["High", "Very High", "Moderately High"],
+            }
+            
+            try:
+                metrics_df = compute_metrics_cached()
+                valid_grades = RISK_MAP[risk_choice]
+                
+                # Filter by risk grade
+                filtered = metrics_df[metrics_df["risk_grade"].isin(valid_grades)].copy()
+                
+                if filtered.empty:
+                    st.warning(f"No funds found for risk grades {valid_grades}. Showing top overall funds.")
+                    filtered = metrics_df.copy()
+                
+                # Sort by scorecard (composite score)
+                filtered = filtered.sort_values('scorecard', ascending=False).head(top_n).reset_index(drop=True)
+                
+                st.subheader(f"3️⃣ Top {len(filtered)} Recommended Funds for {risk_choice} Risk")
+                st.success(f"Found {len(filtered)} funds matching your {risk_choice} risk profile!")
+                
+                # Display recommendation cards
+                for idx, row in filtered.iterrows():
+                    rank = idx + 1
+                    fund_name = row.get('scheme_name', 'Unknown Fund')
+                    category = row.get('category', 'N/A')
+                    risk_grade = row.get('risk_grade', 'N/A')
+                    scorecard = row.get('scorecard', 0)
+                    sharpe = row.get('sharpe_ratio', 0)
+                    cagr_3yr = row.get('cagr_3yr', 0)
+                    alpha_val = row.get('alpha', 0)
+                    max_dd = row.get('max_drawdown', 0)
+                    expense = row.get('expense_ratio', 0)
+                    fund_house = row.get('fund_house', 'N/A')
+                    
+                    # Medal emojis
+                    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+                    medal = medals.get(rank, f"#{rank}")
+                    
+                    # Score color
+                    if scorecard >= 75:
+                        score_color = "#22c55e"
+                    elif scorecard >= 50:
+                        score_color = "#3b82f6"
+                    else:
+                        score_color = "#f59e0b"
+                    
+                    st.markdown(f"""
+                    <div class="rec-card">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+                            <div>
+                                <span style="font-size:1.5rem;">{medal}</span>
+                                <span style="font-size:1.1rem; font-weight:600; color:#f1f5f9; margin-left:0.5rem;">{fund_name}</span>
+                            </div>
+                            <div style="background:{score_color}; color:white; padding:0.3rem 1rem; border-radius:20px; font-weight:700; font-size:1rem;">
+                                Score: {scorecard:.1f}
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:1.5rem; flex-wrap:wrap; font-size:0.85rem; color:#94a3b8;">
+                            <span>🏢 {fund_house}</span>
+                            <span>📂 {category}</span>
+                            <span>⚠️ {risk_grade}</span>
+                            <span>💰 Exp: {expense if expense else 'N/A'}%</span>
+                        </div>
+                        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-top:1rem;">
+                            <div style="text-align:center; padding:0.5rem; background:rgba(255,255,255,0.03); border-radius:8px;">
+                                <div style="font-size:0.75rem; color:#64748b;">Sharpe</div>
+                                <div style="font-size:1.1rem; font-weight:600; color:#e2e8f0;">{sharpe:.3f if sharpe else 'N/A'}</div>
+                            </div>
+                            <div style="text-align:center; padding:0.5rem; background:rgba(255,255,255,0.03); border-radius:8px;">
+                                <div style="font-size:0.75rem; color:#64748b;">CAGR 3Y</div>
+                                <div style="font-size:1.1rem; font-weight:600; color:#22c55e;">{cagr_3yr*100:.2f}%</div>
+                            </div>
+                            <div style="text-align:center; padding:0.5rem; background:rgba(255,255,255,0.03); border-radius:8px;">
+                                <div style="font-size:0.75rem; color:#64748b;">Alpha</div>
+                                <div style="font-size:1.1rem; font-weight:600; color:#3b82f6;">{alpha_val:.4f if alpha_val else 'N/A'}</div>
+                            </div>
+                            <div style="text-align:center; padding:0.5rem; background:rgba(255,255,255,0.03); border-radius:8px;">
+                                <div style="font-size:0.75rem; color:#64748b;">Max DD</div>
+                                <div style="font-size:1.1rem; font-weight:600; color:#ef4444;">{max_dd*100:.2f}%</div>
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Radar chart comparison
+                st.markdown("---")
+                st.subheader("📊 Comparative Radar Chart")
+                
+                radar_metrics = ['sharpe_ratio', 'sortino_ratio', 'alpha', 'cagr_3yr']
+                radar_labels = ['Sharpe', 'Sortino', 'Alpha', 'CAGR 3Y']
+                
+                available_radar = [m for m in radar_metrics if m in filtered.columns]
+                available_labels = [radar_labels[i] for i, m in enumerate(radar_metrics) if m in filtered.columns]
+                
+                if available_radar and len(filtered) > 0:
+                    fig_radar = go.Figure()
+                    
+                    for _, row in filtered.iterrows():
+                        values = []
+                        for metric in available_radar:
+                            val = row.get(metric, 0)
+                            values.append(val if val is not None and not np.isnan(val) else 0)
+                        
+                        # Normalize to 0-100 scale for radar
+                        min_vals = filtered[available_radar].min()
+                        max_vals = filtered[available_radar].max()
+                        norm_values = []
+                        for i, metric in enumerate(available_radar):
+                            range_val = max_vals[metric] - min_vals[metric]
+                            if range_val > 0:
+                                norm_values.append(((values[i] - min_vals[metric]) / range_val) * 100)
+                            else:
+                                norm_values.append(50)
+                        
+                        norm_values.append(norm_values[0])  # Close the radar
+                        
+                        fig_radar.add_trace(go.Scatterpolar(
+                            r=norm_values,
+                            theta=available_labels + [available_labels[0]],
+                            fill='toself',
+                            name=str(row.get('scheme_name', 'Fund'))[:30],
+                            opacity=0.6
+                        ))
+                    
+                    fig_radar.update_layout(
+                        polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+                        title="Normalized Metric Comparison",
+                        height=500,
+                    )
+                    st.plotly_chart(fig_radar, use_container_width=True)
+                
+                # Investment projection
+                st.markdown("---")
+                st.subheader("💹 Projected Returns (Indicative)")
+                st.caption("⚠️ Past performance does not guarantee future returns. Always consult a SEBI-registered financial advisor.")
+                
+                proj_cols = st.columns(min(len(filtered), 5))
+                for i, (_, row) in enumerate(filtered.head(5).iterrows()):
+                    if i < len(proj_cols):
+                        cagr = row.get('cagr_3yr', 0)
+                        if cagr and not np.isnan(cagr) and cagr > 0:
+                            if "SIP" in investment_mode:
+                                # SIP projection: FV = P × [((1+r)^n - 1) / r] × (1+r)
+                                monthly_rate = cagr / 12
+                                months = 36  # 3 years
+                                fv = investment_amount * (((1 + monthly_rate) ** months - 1) / monthly_rate) * (1 + monthly_rate)
+                                invested = investment_amount * months
+                            else:
+                                # Lumpsum projection
+                                fv = investment_amount * (1 + cagr) ** 3
+                                invested = investment_amount
+                            
+                            gain = fv - invested
+                            gain_pct = (gain / invested * 100) if invested > 0 else 0
+                            
+                            with proj_cols[i]:
+                                st.metric(
+                                    label=str(row.get('scheme_name', 'Fund'))[:25],
+                                    value=f"₹{fv:,.0f}",
+                                    delta=f"+{gain_pct:.1f}% ({3}yr)"
+                                )
+                        else:
+                            with proj_cols[i]:
+                                st.metric(
+                                    label=str(row.get('scheme_name', 'Fund'))[:25],
+                                    value="N/A",
+                                    delta="Insufficient data"
+                                )
+            
+            except Exception as e:
+                st.error(f"Error computing recommendations: {str(e)}")
+                st.info("Please ensure the pipeline has been run and the database is populated.")
 
 st.sidebar.markdown("---")
 st.sidebar.info("Developed for Bluestock Mutual Fund Analytics Capstone Project.")
