@@ -5,14 +5,14 @@
 -- Or:  sqlite3 data/db/bluestock_mf.db < sql/schema.sql
 -- ============================================================
 
-PRAGMA foreign_keys = ON;
+-- ============================================================
 
 -- ────────────────────────────────────────────────────────────
 --  DIMENSION TABLES
 -- ────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS dim_fund (
-    fund_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    fund_id         SERIAL PRIMARY KEY,
     amfi_code       TEXT    NOT NULL UNIQUE,
     scheme_name     TEXT    NOT NULL,
     fund_house      TEXT    NOT NULL,
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS dim_fund (
 );
 
 CREATE TABLE IF NOT EXISTS dim_date (
-    date_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    date_id         SERIAL PRIMARY KEY,
     date            DATE    NOT NULL UNIQUE,
     year            INTEGER NOT NULL,
     quarter         INTEGER NOT NULL CHECK(quarter BETWEEN 1 AND 4),
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS dim_date (
 -- ────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS fact_nav (
-    nav_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    nav_id          SERIAL PRIMARY KEY,
     amfi_code       TEXT    NOT NULL,
     date            DATE    NOT NULL,
     nav             REAL    NOT NULL CHECK(nav > 0),
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS fact_nav (
 );
 
 CREATE TABLE IF NOT EXISTS fact_transactions (
-    txn_id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    txn_id              SERIAL PRIMARY KEY,
     investor_id         TEXT,
     folio_number        TEXT,
     amfi_code           TEXT,
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS fact_transactions (
 );
 
 CREATE TABLE IF NOT EXISTS fact_performance (
-    perf_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    perf_id         SERIAL PRIMARY KEY,
     amfi_code       TEXT    NOT NULL,
     as_of_date      DATE,
     return_1m       REAL,
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS fact_performance (
 );
 
 CREATE TABLE IF NOT EXISTS fact_aum (
-    aum_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    aum_id          SERIAL PRIMARY KEY,
     amfi_code       TEXT,
     fund_house      TEXT,
     category        TEXT,
@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS fact_aum (
 );
 
 CREATE TABLE IF NOT EXISTS fact_sip (
-    sip_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    sip_id          SERIAL PRIMARY KEY,
     month_year      DATE,
     total_sip_inflow_cr    REAL    CHECK(total_sip_inflow_cr >= 0),
     sip_accounts    INTEGER CHECK(sip_accounts >= 0),

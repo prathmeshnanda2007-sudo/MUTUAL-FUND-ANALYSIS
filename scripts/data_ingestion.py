@@ -79,10 +79,10 @@ def print_dataset_summary(name: str, df: pd.DataFrame) -> None:
     print(separator)
 
     # Basic shape
-    print(f"\n📐 Shape: {df.shape[0]:,} rows × {df.shape[1]} columns")
+    print(f"\n> Shape: {df.shape[0]:,} rows — {df.shape[1]} columns")
 
     # Data types
-    print("\n📋 Data Types:")
+    print("\nData Types:")
     for col, dtype in df.dtypes.items():
         null_count = df[col].isna().sum()
         null_pct = null_count / len(df) * 100

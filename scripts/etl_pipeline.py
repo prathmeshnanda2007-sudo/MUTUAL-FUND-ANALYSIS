@@ -14,9 +14,14 @@ from pathlib import Path
 
 import pandas as pd
 from sqlalchemy import create_engine, text
+from pathlib import Path
+import sys
 
 # ── Setup ──────────────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.append(str(BASE_DIR))
+from scripts.config import DB_URI_NON_POOLED_SA
+
 RAW_DIR = BASE_DIR / "data" / "raw"
 PROCESSED_DIR = BASE_DIR / "data" / "processed"
 DB_DIR = BASE_DIR / "data" / "db"
@@ -24,7 +29,7 @@ DB_DIR = BASE_DIR / "data" / "db"
 PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 DB_DIR.mkdir(parents=True, exist_ok=True)
 
-DB_PATH = DB_DIR / "bluestock_mf.db"
+DB_DIR.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -62,7 +67,7 @@ def clean_nav_history(df: pd.DataFrame) -> pd.DataFrame:
     code_col = next((c for c in df.columns if "amfi" in c.lower() or "code" in c.lower()), None)
 
     if date_col:
-        df[date_col] = pd.to_datetime(df[date_col], dayfirst=True, errors="coerce")
+        df[date_col] = pd.to_datetime(df[date_col], format='mixed', errors="coerce")
         df = df.dropna(subset=[date_col])
 
     if code_col and date_col:
@@ -127,7 +132,7 @@ def clean_investor_transactions(df: pd.DataFrame) -> pd.DataFrame:
     # Fix date format
     date_col = next((c for c in df.columns if "date" in c.lower()), None)
     if date_col:
-        df[date_col] = pd.to_datetime(df[date_col], dayfirst=True, errors="coerce")
+        df[date_col] = pd.to_datetime(df[date_col], format='mixed', errors="coerce")
         null_dates = df[date_col].isna().sum()
         if null_dates > 0:
             logger.warning(f"    {null_dates} rows with invalid dates dropped")
@@ -217,7 +222,7 @@ def clean_generic(df: pd.DataFrame, name: str) -> pd.DataFrame:
     for col in df.columns:
         col_lower = col.lower()
         if "date" in col_lower:
-            df[col] = pd.to_datetime(df[col], dayfirst=True, errors="coerce")
+            df[col] = pd.to_datetime(df[col], format='mixed', errors="coerce")
 
     df = df.drop_duplicates().reset_index(drop=True)
     logger.info(f"    Shape: {original_shape} -> {df.shape}")
@@ -252,7 +257,7 @@ def load_schema(engine) -> None:
 
 def load_to_db(engine, df: pd.DataFrame, table_name: str) -> int:
     """
-    Load a DataFrame into SQLite, replacing existing table.
+    Load a DataFrame into SQLite.
 
     Args:
         engine: SQLAlchemy engine.
@@ -262,9 +267,22 @@ def load_to_db(engine, df: pd.DataFrame, table_name: str) -> int:
     Returns:
         Number of rows inserted.
     """
-    df.to_sql(table_name, engine, if_exists="replace", index=False)
+    # Only keep columns that are in the dataframe, drop unnamed
+    df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+    
     with engine.connect() as conn:
-        count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
+        try:
+            result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = :t"), {"t": table_name})
+            db_cols = [row[0] for row in result]
+            if db_cols:
+                cols_to_keep = [c for c in df.columns if c in db_cols]
+                df = df[cols_to_keep]
+        except Exception as e:
+            logger.debug(f"Failed to get table info: {e}")
+
+    df.to_sql(table_name, engine, if_exists="append", index=False)
+    with engine.connect() as conn:
+        count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()  # nosec
     logger.info(f"    Loaded '{table_name}': {count:,} rows")
     return count
 
@@ -276,20 +294,21 @@ def load_to_db(engine, df: pd.DataFrame, table_name: str) -> int:
 TABLE_MAP = {
     "fund_master": "dim_fund",
     "nav_history": "fact_nav",
-    "investor_transactions": "fact_transactions",
-    "scheme_performance": "fact_performance",
-    "aum_data": "fact_aum",
-    "sip_data": "fact_sip",
-    "portfolio_holdings": "fact_holdings",
-    "folio_data": "fact_folio",
+    "aum_by_fund_house": "fact_aum",
+    "monthly_sip_inflows": "fact_sip",
     "category_inflows": "fact_category_inflows",
-    "benchmark_returns": "fact_benchmark",
+    "industry_folio_count": "fact_folio",
+    "scheme_performance": "fact_performance",
+    "investor_transactions": "fact_transactions",
+    "portfolio_holdings": "fact_holdings",
+    "benchmark_indices": "fact_benchmark",
 }
 
 
 def get_table_name(filename: str) -> str:
     """Map CSV filename to database table name."""
     stem = Path(filename).stem.lower()
+    stem = re.sub(r'^\d+_', '', stem)
     return TABLE_MAP.get(stem, f"raw_{stem}")
 
 
@@ -304,9 +323,6 @@ def run_pipeline() -> dict:
     2. Clean each dataset
     3. Save cleaned CSVs to data/processed/
     4. Load all into SQLite
-
-    Returns:
-        Dict mapping table_name -> row_count.
     """
     logger.info("=" * 60)
     logger.info("  BLUESTOCK MF — ETL PIPELINE")
@@ -325,8 +341,11 @@ def run_pipeline() -> dict:
     logger.info(f"Found {len(raw_files)} raw dataset files")
 
     # Create DB engine
-    engine = create_engine(f"sqlite:///{DB_PATH}", echo=False)
-    logger.info(f"Connected to SQLite: {DB_PATH}")
+    engine = create_engine(DB_URI_NON_POOLED_SA, echo=False)
+    logger.info(f"Connected to Neon DB (PostgreSQL)")
+
+    # Load SQL Schema
+    load_schema(engine)
 
     row_counts = {}
 
@@ -356,6 +375,40 @@ def run_pipeline() -> dict:
         df_clean.to_csv(out_path, index=False)
         logger.info(f"  Saved processed CSV: {out_path.name}")
 
+        # Rename columns to match schema
+        clean_stem = re.sub(r'^\d+_', '', stem)
+        rename_map = {
+            "plan": "plan_type",
+            "launch_date": "inception_date",
+            "expense_ratio_pct": "expense_ratio",
+            "risk_category": "risk_grade",
+            "date": "as_of_date", # for aum_data
+            "aum_crore": "aum_cr",
+            "aum_lakh_crore": "aum_lakh_cr",
+            "month": "month_year", # for sip_data
+            "sip_inflow_crore": "total_sip_inflow_cr",
+            "active_sip_accounts_crore": "sip_accounts",
+            "return_1m_pct": "return_1m",
+            "return_3m_pct": "return_3m",
+            "return_6m_pct": "return_6m",
+            "return_1yr_pct": "return_1yr",
+            "return_3yr_pct": "return_3yr",
+            "return_5yr_pct": "return_5yr",
+            "sharpe_ratio_ann": "sharpe_ratio",
+            "sortino_ratio_ann": "sortino_ratio",
+            "std_dev_ann_pct": "std_dev_1yr",
+            "transaction_date": "transaction_date", # it is already
+            "amount_inr": "amount_inr",
+            "kyc_status": "kyc_status",
+        }
+        # In nav_history and transactions, 'date' should remain 'date' or 'transaction_date'
+        if clean_stem == "aum_by_fund_house":
+            pass # "date" -> "as_of_date"
+        elif clean_stem == "nav_history":
+            if "date" in rename_map: del rename_map["date"]
+            
+        df_clean = df_clean.rename(columns=rename_map)
+
         # Load to DB
         table_name = get_table_name(filepath.name)
         count = load_to_db(engine, df_clean, table_name)
@@ -366,12 +419,13 @@ def run_pipeline() -> dict:
         if "summary" not in nav_file.name:
             try:
                 df_nav = pd.read_csv(nav_file)
-                df_nav["date"] = pd.to_datetime(df_nav["date"], dayfirst=True, errors="coerce")
+                df_nav["date"] = pd.to_datetime(df_nav["date"], format='mixed', errors="coerce")
                 table_name = "fact_nav_live"
                 count = load_to_db(engine, df_nav, table_name)
                 row_counts[table_name] = count
                 break  # Load combined once
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Failed to load combined data row: {e}")
                 pass
 
     # Verification summary

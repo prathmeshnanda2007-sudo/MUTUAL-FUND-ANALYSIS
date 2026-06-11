@@ -61,21 +61,12 @@ def load_fund_info() -> pd.DataFrame | None:
     return pd.read_csv(fund_master_path, low_memory=False)
 
 
+from sqlalchemy import create_engine, text
+import sys
+
 def recommend(risk_appetite: str, top_n: int = 3) -> pd.DataFrame:
     """
     Recommend top N mutual funds based on risk appetite.
-
-    Algorithm:
-    1. Filter funds by risk_grade matching the risk_appetite
-    2. Rank by Sharpe ratio (descending)
-    3. Return top N
-
-    Args:
-        risk_appetite: "Low", "Moderate", or "High"
-        top_n: Number of recommendations (default 3)
-
-    Returns:
-        DataFrame with recommended funds.
     """
     risk_appetite = risk_appetite.strip().title()
     if risk_appetite not in RISK_MAP:
@@ -83,61 +74,51 @@ def recommend(risk_appetite: str, top_n: int = 3) -> pd.DataFrame:
 
     valid_grades = RISK_MAP[risk_appetite]
 
-    # Load scorecard
-    scorecard = load_fund_scorecard()
-    fund_info = load_fund_info()
+    sys.path.append(str(BASE_DIR))
+    from scripts.config import DB_URI_POOLED_SA
+    
+    try:
+        from scripts.compute_metrics import compute_all_metrics
+        engine = create_engine(DB_URI_POOLED_SA)
+        with engine.connect() as conn:
+            df_nav = pd.read_sql_query(text("SELECT amfi_code, date, nav FROM fact_nav WHERE date >= '2023-01-01'"), conn)
+            if not df_nav.empty:
+                df_nav['date'] = pd.to_datetime(df_nav['date'])
+                df_nav = df_nav.drop_duplicates(subset=['date', 'amfi_code'])
+                nav_pivot = df_nav.pivot(index='date', columns='amfi_code', values='nav').ffill()
 
-    if scorecard is None and fund_info is None:
-        print("\n[INFO] Scorecard not found. Using live NAV data for demonstration.")
+            df_bm = pd.read_sql_query(text("SELECT as_of_date as date, close_value as nav FROM fact_benchmark WHERE index_name = 'NIFTY 100 TRI' AND as_of_date >= '2023-01-01'"), conn)
+            df_bm['date'] = pd.to_datetime(df_bm['date'])
+            bm_series = df_bm.set_index('date')['nav'].ffill()
+
+            df_funds = pd.read_sql_query(text("SELECT amfi_code, scheme_name, fund_house, category, expense_ratio, risk_grade FROM dim_fund"), conn)
+
+        metrics_df = compute_all_metrics(nav_pivot, bm_series, df_funds)
+        
+        # Filter by risk grade
+        filtered = metrics_df[metrics_df["risk_grade"].isin(valid_grades)]
+        
+        if filtered.empty:
+            print(f"\n[WARNING] No funds found for risk_grade in {valid_grades}. Showing top {top_n} overall.")
+            filtered = metrics_df
+            
+        # Rank by Sharpe ratio
+        sharpe_col = next((c for c in filtered.columns if "sharpe" in c.lower()), "scorecard")
+        filtered = filtered.sort_values(sharpe_col, ascending=False, na_position="last")
+        
+        display_cols = []
+        for col in ["amfi_code", "scheme_name", "fund_house", "category", "risk_grade",
+                    "sharpe_ratio", "cagr_3yr", "expense_ratio", "scorecard"]:
+            if col in filtered.columns:
+                display_cols.append(col)
+
+        recommendations = filtered[display_cols].head(top_n).reset_index(drop=True)
+        recommendations.index += 1  # 1-based ranking
+        return recommendations
+        
+    except Exception as e:
+        logger.error(f"Failed to calculate metrics: {e}")
         return _demo_recommend(risk_appetite, top_n)
-
-    # Merge scorecard with fund info if available
-    if scorecard is not None and fund_info is not None:
-        # Detect amfi_code column
-        code_col = next((c for c in fund_info.columns if "amfi" in c.lower() or "code" in c.lower()), None)
-        risk_col = next((c for c in fund_info.columns if "risk" in c.lower()), None)
-
-        if code_col and risk_col:
-            fund_info = fund_info.rename(columns={code_col: "amfi_code", risk_col: "risk_grade"})
-            merged = scorecard.merge(
-                fund_info[["amfi_code", "risk_grade", "scheme_name", "fund_house", "category",
-                           "expense_ratio"]].drop_duplicates("amfi_code"),
-                on="amfi_code",
-                how="left",
-                suffixes=("", "_info"),
-            )
-        else:
-            merged = scorecard
-    elif scorecard is not None:
-        merged = scorecard
-    else:
-        return _demo_recommend(risk_appetite, top_n)
-
-    # Filter by risk grade
-    risk_col = "risk_grade" if "risk_grade" in merged.columns else None
-    if risk_col:
-        filtered = merged[merged[risk_col].isin(valid_grades)]
-    else:
-        filtered = merged
-
-    if filtered.empty:
-        print(f"\n[WARNING] No funds found for risk_grade in {valid_grades}. Showing top {top_n} overall.")
-        filtered = merged
-
-    # Rank by Sharpe ratio
-    sharpe_col = next((c for c in filtered.columns if "sharpe" in c.lower()), "scorecard")
-    filtered = filtered.sort_values(sharpe_col, ascending=False, na_position="last")
-
-    # Select display columns
-    display_cols = []
-    for col in ["amfi_code", "scheme_name", "fund_house", "category", "risk_grade",
-                "sharpe_ratio", "cagr_3yr", "expense_ratio", "scorecard"]:
-        if col in filtered.columns:
-            display_cols.append(col)
-
-    recommendations = filtered[display_cols].head(top_n).reset_index(drop=True)
-    recommendations.index += 1  # 1-based ranking
-    return recommendations
 
 
 def _demo_recommend(risk_appetite: str, top_n: int) -> pd.DataFrame:

@@ -15,6 +15,7 @@ import logging
 import subprocess
 import sys
 import time
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -43,11 +44,15 @@ def run_script(script_path: Path, description: str) -> bool:
     logger.info(f"  Script:  {script_path.name}")
     logger.info(f"{'=' * 60}")
 
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+
     start = time.time()
     result = subprocess.run(
         [sys.executable, str(script_path)],
         cwd=str(BASE_DIR),
         capture_output=False,
+        env=env,
     )
     elapsed = time.time() - start
 
@@ -83,7 +88,7 @@ def phase_2_etl() -> bool:
 
 def phase_3_recommender_demo() -> bool:
     """Phase 3 quick demo: Test recommender."""
-    logger.info("\nRecommender demo (Low risk):")
+    logger.info("\nRecommender demo (Moderate risk):")
     result = subprocess.run(
         [sys.executable, str(BASE_DIR / "scripts" / "recommender.py"), "--risk", "Moderate"],
         cwd=str(BASE_DIR),
@@ -92,15 +97,37 @@ def phase_3_recommender_demo() -> bool:
     return result.returncode == 0
 
 
+def phase_4_analytics() -> bool:
+    """Phase 4: Run EDA and generate analytics notebooks."""
+    success = True
+    success &= run_script(
+        BASE_DIR / "scripts" / "run_eda.py",
+        "Generate EDA Charts"
+    )
+    success &= run_script(
+        BASE_DIR / "scripts" / "create_notebook.py",
+        "Generate EDA Notebook"
+    )
+    success &= run_script(
+        BASE_DIR / "scripts" / "create_performance_notebook.py",
+        "Generate Performance Notebook"
+    )
+    success &= run_script(
+        BASE_DIR / "scripts" / "create_advanced_notebook.py",
+        "Generate Advanced Analytics Notebook"
+    )
+    return success
+
+
 def main() -> None:
     """Main entry point."""
     parser = argparse.ArgumentParser(description="Bluestock MF Pipeline Runner")
     parser.add_argument(
         "--phase",
         type=int,
-        choices=[1, 2, 3],
+        choices=[1, 2, 3, 4],
         default=None,
-        help="Run specific phase (1=ingestion, 2=ETL, 3=demo). Default: all phases.",
+        help="Run specific phase (1=ingestion, 2=ETL, 3=demo, 4=analytics). Default: all phases.",
     )
     args = parser.parse_args()
 
@@ -112,6 +139,7 @@ def main() -> None:
         1: ("Day 1 — Data Ingestion", phase_1_data_ingestion),
         2: ("Day 2 — ETL + SQLite Load", phase_2_etl),
         3: ("Recommender Demo", phase_3_recommender_demo),
+        4: ("Analytics Generation", phase_4_analytics),
     }
 
     if args.phase:

@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bluestock MF Analytics - Professional Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            color: #ffffff;
+            background-color: #000;
+            overflow-x: hidden;
+        }
+
+        /* Fixed Video Background */
+        .video-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 0;
+        }
+        
+        #bg-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center;
+        }
+
+        /* Dark Overlay to make text readable */
+        .video-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.65);
+            z-index: 1;
+        }
+
+        /* Main Content Wrapper */
+        .content-wrapper {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Navbar */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 4rem;
+            backdrop-filter: blur(10px);
+            background: rgba(0, 0, 0, 0.2);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .nav-brand {
+            font-weight: 800;
+            font-size: 1.5rem;
+            color: white;
+            text-decoration: none;
+            letter-spacing: -0.5px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 0.8rem 2rem;
+            border-radius: 50px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: #fff;
+            color: #000;
+        }
+        .btn-primary:hover {
+            background: #e2e8f0;
+            transform: translateY(-2px);
+        }
+
+        .btn-outline {
+            border: 1px solid rgba(255,255,255,0.5);
+            color: #fff;
+            backdrop-filter: blur(5px);
+        }
+        .btn-outline:hover {
+            background: rgba(255,255,255,0.1);
+            transform: translateY(-2px);
+        }
+
+        /* Hero */
+        .hero {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 8rem 4rem 6rem 4rem;
+            max-width: 1000px;
+        }
+
+        .hero h1 {
+            font-size: 4.5rem;
+            font-weight: 700;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            letter-spacing: -1.5px;
+        }
+
+        .hero p {
+            font-size: 1.35rem;
+            line-height: 1.6;
+            color: #cbd5e1;
+            max-width: 700px;
+            margin-bottom: 3rem;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 1.5rem;
+        }
+
+        /* Sequential Features Section */
+        .features-section {
+            padding: 2rem 4rem 4rem 4rem;
+            max-width: 1000px;
+        }
+
+        .feature-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 2rem;
+            margin-bottom: 2.5rem;
+            padding: 2.5rem;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 24px;
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s ease, background 0.3s ease;
+        }
+
+        .feature-row:hover {
+            transform: translateX(10px);
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .feature-icon-box {
+            background: #fff;
+            color: #000;
+            width: 65px;
+            height: 65px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            flex-shrink: 0;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        .feature-content h3 {
+            font-size: 1.75rem;
+            margin: 0 0 0.75rem 0;
+            font-weight: 600;
+        }
+
+        .feature-content p {
+            font-size: 1.1rem;
+            color: #94a3b8;
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        /* Stats Section */
+        .stats-section {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 4rem 2rem;
+            max-width: 1000px;
+            margin: 0 auto 4rem auto;
+            background: rgba(255, 255, 255, 0.03);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            flex-wrap: wrap;
+            gap: 2rem;
+        }
+
+        .stat-box {
+            text-align: center;
+            min-width: 200px;
+        }
+
+        .stat-box h4 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin: 0 0 0.5rem 0;
+            color: #fff;
+        }
+
+        .stat-box p {
+            color: #94a3b8;
+            font-size: 1.1rem;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* How It Works Section */
+        .how-it-works {
+            padding: 4rem;
+            max-width: 1000px;
+            margin: 0 auto 4rem auto;
+            text-align: center;
+        }
+
+        .how-it-works h2 {
+            font-size: 3.5rem;
+            margin-bottom: 4rem;
+            letter-spacing: -1px;
+        }
+
+        .steps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 3rem;
+        }
+
+        .step-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 24px;
+            padding: 3rem 2rem;
+            backdrop-filter: blur(10px);
+            position: relative;
+            transition: transform 0.3s ease;
+        }
+
+        .step-card:hover {
+            transform: translateY(-10px);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .step-number {
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #fff;
+            color: #000;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .step-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            margin-top: 1rem;
+        }
+
+        .step-card p {
+            color: #94a3b8;
+            line-height: 1.6;
+        }
+
+        /* Final CTA Section */
+        .cta-section {
+            text-align: center;
+            padding: 8rem 2rem 4rem 2rem;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .cta-section h2 {
+            font-size: 4rem;
+            letter-spacing: -1.5px;
+            line-height: 1.2;
+            margin-bottom: 1.5rem;
+        }
+
+        .cta-section p {
+            font-size: 1.35rem;
+            color: #cbd5e1;
+            margin-bottom: 3rem;
+        }
+
+        footer {
+            padding: 3rem;
+            text-align: center;
+            color: #64748b;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            margin-top: 2rem;
+        }
+
+        /* Responsive Media Queries */
+        @media (max-width: 900px) {
+            .hero { padding: 6rem 2rem 4rem 2rem; }
+            .hero h1 { font-size: 3.5rem; }
+            .features-section, .stats-section, .how-it-works { padding: 2rem; }
+        }
+
+        @media (max-width: 768px) {
+            .navbar { padding: 1rem 1.5rem; flex-direction: column; gap: 1rem; }
+            .hero h1 { font-size: 2.8rem; }
+            .hero p { font-size: 1.15rem; }
+            .hero-actions { flex-direction: column; width: 100%; }
+            .hero-actions .btn { width: 100%; text-align: center; }
+            
+            .feature-row { flex-direction: column; align-items: center; text-align: center; padding: 2rem 1.5rem; }
+            .feature-icon-box { margin-bottom: 1rem; }
+            
+            .stat-box h4 { font-size: 2.8rem; }
+            .steps-grid { grid-template-columns: 1fr; }
+            
+            .cta-section h2 { font-size: 2.8rem; }
+            .cta-section p { font-size: 1.15rem; }
+            .cta-section .btn { width: 100%; text-align: center; padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="video-container">
+        <video id="bg-video" 
+               src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260530_042513_df96a13b-6155-4f6e-8b93-c9dee66fba08.mp4" 
+               muted playsinline preload="auto">
+        </video>
+    </div>
+    
+    <div class="video-overlay"></div>
+
+    <div class="content-wrapper">
+        <nav class="navbar">
+            <a href="/" class="nav-brand">Bluestock MF</a>
+            <div style="display: flex; gap: 1.5rem; align-items: center;">
+                <a href="/login" style="color: #fff; text-decoration: none; font-weight: 500;">Log in</a>
+                <a href="/register" class="btn btn-primary" style="padding: 0.6rem 1.5rem;">Sign Up</a>
+            </div>
+        </nav>
+
+        <main class="hero">
+            <h1>Advanced Mutual Fund Analytics.</h1>
+            <p>
+                Go beyond simple returns. Analyze risk-adjusted metrics, dive deep into portfolio holdings, and uncover geographic investor trends with our lightning-fast platform.
+            </p>
+            <div class="hero-actions">
+                <a href="/register" class="btn btn-primary">
+                    <i class="fa-solid fa-rocket" style="margin-right: 8px;"></i> Get Started
+                </a>
+                <a href="/login" class="btn btn-outline">
+                    <i class="fa-solid fa-arrow-right" style="margin-right: 8px;"></i> Sign In
+                </a>
+            </div>
+        </main>
+
+        <section class="features-section">
+            <div class="feature-row">
+                <div class="feature-icon-box">
+                    <i class="fa-solid fa-chart-line"></i>
+                </div>
+                <div class="feature-content">
+                    <h3>Market Overview</h3>
+                    <p>Track macro-level insights including total Assets Under Management (AUM) distributions across fund houses and industry folio growth trends over time.</p>
+                </div>
+            </div>
+
+            <div class="feature-row">
+                <div class="feature-icon-box">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <div class="feature-content">
+                    <h3>Performance & Risk</h3>
+                    <p>Evaluate true fund performance using institutional metrics like Alpha, Beta, Sharpe ratio, Sortino ratio, and historical Maximum Drawdowns.</p>
+                </div>
+            </div>
+
+            <div class="feature-row">
+                <div class="feature-icon-box">
+                    <i class="fa-solid fa-users-viewfinder"></i>
+                </div>
+                <div class="feature-content">
+                    <h3>Investor Demographics</h3>
+                    <p>Deep-dive into who is investing. Track age matrices, SIP vs. Lumpsum preferences, and geographic Tier-1 vs. Tier-2 city penetrations.</p>
+                </div>
+            </div>
+
+            <div class="feature-row">
+                <div class="feature-icon-box">
+                    <i class="fa-solid fa-layer-group"></i>
+                </div>
+                <div class="feature-content">
+                    <h3>Portfolio Holdings</h3>
+                    <p>Look under the hood of any mutual fund. View top stock holdings, weights, and interactive Sunburst charts for macro sector vs. micro stock exposure.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="stats-section">
+            <div class="stat-box">
+                <h4>40+</h4>
+                <p>Funds Tracked</p>
+            </div>
+            <div class="stat-box">
+                <h4>10k+</h4>
+                <p>Data Points</p>
+            </div>
+            <div class="stat-box">
+                <h4>0ms</h4>
+                <p>Auth Latency</p>
+            </div>
+            <div class="stat-box">
+                <h4>100%</h4>
+                <p>Data Accuracy</p>
+            </div>
+        </section>
+
+        <section class="how-it-works">
+            <h2>How It Works</h2>
+            <div class="steps-grid">
+                <div class="step-card">
+                    <div class="step-number">1</div>
+                    <h3>Authenticate Securely</h3>
+                    <p>One-click login using your existing Google account. No new passwords to remember, highly secure.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-number">2</div>
+                    <h3>Select a Fund</h3>
+                    <p>Choose from over 40+ tracked mutual funds across various categories, AMCs, and risk profiles.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-number">3</div>
+                    <h3>Analyze the Data</h3>
+                    <p>Dive deep into our interactive Plotly charts and uncover institutional-grade insights instantly.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="cta-section">
+            <h2>Ready to transform your investment strategy?</h2>
+            <p>Join intelligent investors leveraging our platform today.</p>
+            <a href="/register" class="btn btn-primary" style="padding: 1.2rem 3.5rem; font-size: 1.25rem;">Create Your Free Account</a>
+        </section>
+        
+        <footer>
+            &copy; 2026 Bluestock Mutual Fund Analytics. Securely authenticated via Google OAuth 2.0.
+        </footer>
+    </div>
+
+    <script>
+        const video = document.getElementById('bg-video');
+        
+        // Autoplay on mobile/touch devices where mousemove doesn't exist
+        const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        if (isTouchDevice) {
+            video.autoplay = true;
+            video.loop = true;
+            video.play().catch(e => console.log("Autoplay prevented:", e));
+        } else {
+            // High-performance scrubbing for desktop using requestAnimationFrame
+            let targetTime = 0;
+            let currentTime = 0;
+            let mouseX = window.innerWidth / 2;
+            const SENSITIVITY = 0.001; // Adjusted for lerp sensitivity
+            let isLoaded = false;
+
+            video.addEventListener('loadedmetadata', () => {
+                targetTime = video.currentTime;
+                currentTime = video.currentTime;
+                isLoaded = true;
+                requestAnimationFrame(updateVideo);
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                mouseX = e.clientX;
+            });
+
+            function updateVideo() {
+                if (!isLoaded || !video.duration || Number.isNaN(video.duration)) {
+                    requestAnimationFrame(updateVideo);
+                    return;
+                }
+
+                // Map mouse X to a target time on the video timeline
+                const normalizedX = mouseX / window.innerWidth;
+                const newTarget = normalizedX * video.duration;
+
+                // Smoothly interpolate (lerp) current time towards the target time
+                // This guarantees buttery smooth performance even on low FPS mice
+                currentTime += (newTarget - currentTime) * 0.1;
+                
+                // Only seek if the difference is noticeable to avoid flooding the decoder
+                if (Math.abs(video.currentTime - currentTime) > 0.05) {
+                    video.currentTime = currentTime;
+                }
+
+                requestAnimationFrame(updateVideo);
+            }
+        }
+    </script>
+</body>
+</html>

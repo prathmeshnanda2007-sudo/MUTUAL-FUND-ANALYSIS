@@ -202,6 +202,44 @@ def compute_alpha_beta(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  INFORMATION RATIO & UPSIDE CAPTURE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def compute_information_ratio(fund_returns: pd.Series, benchmark_returns: pd.Series) -> float | None:
+    """
+    Compute annualized Information Ratio.
+    Formula: Mean(Rp - Rb) / Std(Rp - Rb) * sqrt(252)
+    """
+    combined = pd.concat([fund_returns, benchmark_returns], axis=1, join="inner").dropna()
+    if len(combined) < 30:
+        return None
+    active_returns = combined.iloc[:, 0] - combined.iloc[:, 1]
+    std_active = active_returns.std()
+    if std_active == 0:
+        return None
+    ir = (active_returns.mean() / std_active) * np.sqrt(TRADING_DAYS)
+    return round(ir, 4)
+
+def compute_upside_capture(fund_returns: pd.Series, benchmark_returns: pd.Series) -> float | None:
+    """
+    Compute Upside Capture Ratio.
+    Using geometric return of fund on positive benchmark days / geometric return of benchmark on those days.
+    """
+    combined = pd.concat([fund_returns, benchmark_returns], axis=1, join="inner").dropna()
+    up_periods = combined[combined.iloc[:, 1] > 0]
+    if len(up_periods) == 0:
+        return None
+    
+    fund_up_ret = (1 + up_periods.iloc[:, 0]).prod() - 1
+    bench_up_ret = (1 + up_periods.iloc[:, 1]).prod() - 1
+    
+    if bench_up_ret <= 0:
+        return None
+    
+    return round((fund_up_ret / bench_up_ret) * 100, 2)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  MAXIMUM DRAWDOWN
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -272,6 +310,18 @@ def compute_var_cvar(returns: pd.Series, confidence: float = 0.95) -> dict:
         "cvar": round(cvar, 6),
     }
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  MOVING AVERAGES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def compute_sma(nav_series: pd.Series, window: int = 50) -> pd.Series:
+    """Compute Simple Moving Average (SMA)"""
+    return nav_series.rolling(window=window).mean()
+
+def compute_ema(nav_series: pd.Series, span: int = 50) -> pd.Series:
+    """Compute Exponential Moving Average (EMA)"""
+    return nav_series.ewm(span=span, adjust=False).mean()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  ROLLING SHARPE
@@ -415,11 +465,13 @@ def compute_all_metrics(
         row["sharpe_ratio"]  = compute_sharpe(rets)
         row["sortino_ratio"] = compute_sortino(rets)
 
-        # Alpha/Beta
+        # Alpha/Beta & Relative Metrics
         if bm_returns is not None:
             ab = compute_alpha_beta(rets, bm_returns)
+            ab["info_ratio"] = compute_information_ratio(rets, bm_returns)
+            ab["upside_capture"] = compute_upside_capture(rets, bm_returns)
         else:
-            ab = {"alpha": None, "beta": None, "r_squared": None, "tracking_error": None}
+            ab = {"alpha": None, "beta": None, "r_squared": None, "tracking_error": None, "info_ratio": None, "upside_capture": None}
         row.update(ab)
 
         # Max drawdown
