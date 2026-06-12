@@ -154,6 +154,7 @@ def compute_metrics_cached():
     
     bm_df = load_data("SELECT as_of_date as date, close_value as nav FROM fact_benchmark WHERE index_name = 'NIFTY100' AND as_of_date >= '2023-01-01'")
     bm_df['date'] = pd.to_datetime(bm_df['date'])
+    bm_df = bm_df.drop_duplicates(subset=['date'])
     bm_series = bm_df.set_index('date')['nav'].ffill()
     
     funds_df = get_funds_list()
@@ -621,19 +622,19 @@ elif page == "Smart Fund Recommender":
                         <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-top:1rem;">
                             <div style="text-align:center; padding:0.5rem; background:rgba(255,255,255,0.03); border-radius:8px;">
                                 <div style="font-size:0.75rem; color:#64748b;">Sharpe</div>
-                                <div style="font-size:1.1rem; font-weight:600; color:#e2e8f0;">{sharpe:.3f if sharpe else 'N/A'}</div>
+                                <div style="font-size:1.1rem; font-weight:600; color:#e2e8f0;">{f"{sharpe:.3f}" if sharpe is not None and pd.notna(sharpe) else "N/A"}</div>
                             </div>
                             <div style="text-align:center; padding:0.5rem; background:rgba(255,255,255,0.03); border-radius:8px;">
                                 <div style="font-size:0.75rem; color:#64748b;">CAGR 3Y</div>
-                                <div style="font-size:1.1rem; font-weight:600; color:#22c55e;">{cagr_3yr*100:.2f}%</div>
+                                <div style="font-size:1.1rem; font-weight:600; color:#22c55e;">{f"{cagr_3yr*100:.2f}%" if pd.notna(cagr_3yr) else "N/A"}</div>
                             </div>
                             <div style="text-align:center; padding:0.5rem; background:rgba(255,255,255,0.03); border-radius:8px;">
                                 <div style="font-size:0.75rem; color:#64748b;">Alpha</div>
-                                <div style="font-size:1.1rem; font-weight:600; color:#3b82f6;">{alpha_val:.4f if alpha_val else 'N/A'}</div>
+                                <div style="font-size:1.1rem; font-weight:600; color:#3b82f6;">{f"{alpha_val:.4f}" if alpha_val is not None and pd.notna(alpha_val) else "N/A"}</div>
                             </div>
                             <div style="text-align:center; padding:0.5rem; background:rgba(255,255,255,0.03); border-radius:8px;">
                                 <div style="font-size:0.75rem; color:#64748b;">Max DD</div>
-                                <div style="font-size:1.1rem; font-weight:600; color:#ef4444;">{max_dd*100:.2f}%</div>
+                                <div style="font-size:1.1rem; font-weight:600; color:#ef4444;">{f"{max_dd*100:.2f}%" if pd.notna(max_dd) else "N/A"}</div>
                             </div>
                         </div>
                     </div>
