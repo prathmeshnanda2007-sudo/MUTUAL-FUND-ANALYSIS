@@ -80,6 +80,138 @@ custom_css = """
         border-color: rgba(59, 130, 246, 0.3);
         background: rgba(255, 255, 255, 0.05);
     }
+
+    /* Sidebar Redesign */
+    section[data-testid="stSidebar"] {
+        background-color: #111827 !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+        padding-top: 1rem;
+    }
+    .sidebar-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 5px 20px 5px;
+        margin-bottom: 10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .user-profile {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .avatar {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #4f46e5, #8b5cf6);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 1.1rem;
+        box-shadow: 0 2px 10px rgba(139, 92, 246, 0.3);
+    }
+    .user-info {
+        display: flex;
+        flex-direction: column;
+    }
+    .user-name {
+        color: #f8fafc;
+        font-weight: 700;
+        font-size: 0.95rem;
+        letter-spacing: -0.2px;
+    }
+    .user-role {
+        color: #94a3b8;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+    .logout-btn {
+        color: #64748b;
+        text-decoration: none;
+        padding: 8px;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .logout-btn:hover {
+        background: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+    }
+
+    /* Hide standard radio UI */
+    [data-testid="stSidebar"] [data-testid="stRadio"] label[data-testid="stWidgetLabel"] { display: none; }
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label > div:first-child { display: none; }
+    
+    /* Custom nav items */
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] {
+        gap: 4px;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label {
+        padding: 12px 16px;
+        border-radius: 8px;
+        background: transparent;
+        color: #94a3b8;
+        transition: all 0.2s ease;
+        border-left: 3px solid transparent;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label:hover {
+        background: rgba(255, 255, 255, 0.03);
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label > div:last-child {
+        font-weight: 400;
+        color: #94a3b8;
+        font-size: 0.95rem;
+    }
+    /* Active Nav Item */
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) {
+        background: rgba(59, 130, 246, 0.1) !important;
+        border-left: 3px solid #3b82f6 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) > div:last-child {
+        color: #f8fafc !important;
+        font-weight: 600 !important;
+    }
+
+    /* Bottom Info Card */
+    .sidebar-info-card {
+        margin-top: 2rem;
+        padding: 16px;
+        background: linear-gradient(145deg, rgba(30,41,59,0.5), rgba(15,23,42,0.8));
+        border: 1px solid rgba(255,255,255,0.05);
+        border-radius: 12px;
+        position: relative;
+        overflow: hidden;
+    }
+    .sidebar-info-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, #3b82f6, #8b5cf6, transparent);
+        opacity: 0.5;
+    }
+    .sidebar-info-title {
+        color: #f1f5f9;
+        font-weight: 600;
+        font-size: 0.85rem;
+        margin-bottom: 4px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .sidebar-info-desc {
+        color: #64748b;
+        font-size: 0.75rem;
+        line-height: 1.4;
+    }
 </style>
 """
 st.markdown(custom_css, unsafe_allow_html=True)
@@ -169,26 +301,37 @@ def compute_metrics_cached():
 #  UI LAYOUT & NAVIGATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
-st.sidebar.title("📊 Analytics")
-st.sidebar.markdown(f"**Welcome, {user.get('name', 'User')}!**")
-st.sidebar.markdown('<a href="http://localhost:8000/logout" target="_self" style="color:red;font-size:0.9em;">🚪 Logout</a>', unsafe_allow_html=True)
-st.sidebar.markdown("---")
+st.sidebar.markdown(f"""
+<div class="sidebar-header">
+    <div class="user-profile">
+        <div class="avatar">PN</div>
+        <div class="user-info">
+            <span class="user-name">Prathmesh Nanda</span>
+            <span class="user-role">Analyst</span>
+        </div>
+    </div>
+    <a href="http://localhost:8000/logout" target="_self" class="logout-btn" title="Logout">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+    </a>
+</div>
+""", unsafe_allow_html=True)
+
 page = st.sidebar.radio(
     "Navigation", 
     [
-        "Market Overview", 
-        "Fund Performance & Risk", 
-        "Investor Demographics & Transactions", 
-        "Portfolio Holdings & Sector Exposure",
-        "Fund Scorecard & Rankings",
-        "Smart Fund Recommender",
+        "📊 Market Overview", 
+        "🛡️ Fund Performance & Risk", 
+        "👥 Investor Demographics & Transactions", 
+        "💼 Portfolio Holdings & Sector Exposure",
+        "⭐ Fund Scorecard & Rankings",
+        "🧠 Smart Fund Recommender",
     ]
 )
 
 # -------------------------------------------------------------------------------
 # PAGE 1: Market Overview
 # -------------------------------------------------------------------------------
-if page == "Market Overview":
+if "Market Overview" in page:
     st.title("📈 Market Overview")
     st.markdown("Industry AUM, Folio growth, SIP inflows, and category-wise net flows.")
     
@@ -235,7 +378,7 @@ if page == "Market Overview":
 # -------------------------------------------------------------------------------
 # PAGE 2: Fund Performance & Risk
 # -------------------------------------------------------------------------------
-elif page == "Fund Performance & Risk":
+elif "Fund Performance & Risk" in page:
     st.title("⚖️ Fund Performance & Risk")
     st.markdown("Evaluate risk-adjusted returns, Drawdowns, Alpha ranking, and Beta comparisons.")
     
@@ -275,7 +418,7 @@ elif page == "Fund Performance & Risk":
 # -------------------------------------------------------------------------------
 # PAGE 3: Investor Demographics & Transactions
 # -------------------------------------------------------------------------------
-elif page == "Investor Demographics & Transactions":
+elif "Investor Demographics & Transactions" in page:
     st.title("👥 Investor Demographics & Transactions")
     st.markdown("Age/income distribution, city tiers, transaction mix (SIP/Lumpsum), and geographic footprint.")
     
@@ -314,7 +457,7 @@ elif page == "Investor Demographics & Transactions":
 # -------------------------------------------------------------------------------
 # PAGE 4: Portfolio Holdings & Sector Exposure
 # -------------------------------------------------------------------------------
-elif page == "Portfolio Holdings & Sector Exposure":
+elif "Portfolio Holdings & Sector Exposure" in page:
     st.title("🥧 Portfolio Holdings & Sector Exposure")
     st.markdown("Sunburst of top holdings, sector concentration, and stock-level exposures.")
     
@@ -349,7 +492,7 @@ elif page == "Portfolio Holdings & Sector Exposure":
 # -------------------------------------------------------------------------------
 # PAGE 5: Fund Scorecard & Rankings
 # -------------------------------------------------------------------------------
-elif page == "Fund Scorecard & Rankings":
+elif "Fund Scorecard & Rankings" in page:
     st.title("🏆 Fund Scorecard & Rankings")
     st.markdown("Composite scoring (0-100) across returns, risk, alpha, expense ratio, and drawdown for all tracked funds.")
     
@@ -518,7 +661,7 @@ elif page == "Fund Scorecard & Rankings":
 # -------------------------------------------------------------------------------
 # PAGE 6: Smart Fund Recommender
 # -------------------------------------------------------------------------------
-elif page == "Smart Fund Recommender":
+elif "Smart Fund Recommender" in page:
     st.title("🤖 Smart Fund Recommender")
     st.markdown("Get personalized fund recommendations based on your risk appetite and investment preferences.")
     
@@ -733,5 +876,14 @@ elif page == "Smart Fund Recommender":
                 st.error(f"Error computing recommendations: {str(e)}")
                 st.info("Please ensure the pipeline has been run and the database is populated.")
 
-st.sidebar.markdown("---")
-st.sidebar.info("Developed for Mutual Fund Analytics Capstone Project.")
+st.sidebar.markdown("""
+<div class="sidebar-info-card">
+    <div class="sidebar-info-title">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+        MF Analytics Capstone
+    </div>
+    <div class="sidebar-info-desc">
+        Advanced portfolio analytics and AI recommendations platform.
+    </div>
+</div>
+""", unsafe_allow_html=True)
