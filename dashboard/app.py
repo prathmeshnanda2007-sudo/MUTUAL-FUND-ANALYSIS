@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, text
 
 # Configure Streamlit page
 st.set_page_config(
-    page_title="Bluestock MF Analytics Platform",
+    page_title="MF Analytics Platform",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -18,8 +18,11 @@ st.set_page_config(
 # Premium Custom Styling
 custom_css = """
 <style>
-    /* Hide Streamlit Deploy button */
-    .stDeployButton {display:none;}
+    /* Hide Streamlit Deploy button and Header */
+    .stDeployButton {display:none !important;}
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    [data-testid="stHeader"] {display: none !important;}
     
     /* Elegant gradient background overlay */
     .stApp {
@@ -142,7 +145,8 @@ def load_data(query: str, params: dict = None):
 
 @st.cache_data
 def get_funds_list():
-    return load_data("SELECT amfi_code, scheme_name, fund_house, category, risk_grade FROM dim_fund")
+    df = load_data("SELECT amfi_code, scheme_name, fund_house, category, risk_grade FROM dim_fund")
+    return df.drop_duplicates(subset=['amfi_code'])
 
 @st.cache_data
 def compute_metrics_cached():
@@ -165,7 +169,7 @@ def compute_metrics_cached():
 #  UI LAYOUT & NAVIGATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
-st.sidebar.title("📊 Bluestock Analytics")
+st.sidebar.title("📊 Analytics")
 st.sidebar.markdown(f"**Welcome, {user.get('name', 'User')}!**")
 st.sidebar.markdown('<a href="http://localhost:8000/logout" target="_self" style="color:red;font-size:0.9em;">🚪 Logout</a>', unsafe_allow_html=True)
 st.sidebar.markdown("---")
@@ -506,7 +510,7 @@ elif page == "Fund Scorecard & Rankings":
         st.download_button(
             label="📥 Download Full Scorecard (CSV)",
             data=csv,
-            file_name="bluestock_fund_scorecard.csv",
+            file_name="_fund_scorecard.csv",
             mime="text/csv"
         )
 
@@ -730,4 +734,4 @@ elif page == "Smart Fund Recommender":
                 st.info("Please ensure the pipeline has been run and the database is populated.")
 
 st.sidebar.markdown("---")
-st.sidebar.info("Developed for Bluestock Mutual Fund Analytics Capstone Project.")
+st.sidebar.info("Developed for Mutual Fund Analytics Capstone Project.")
