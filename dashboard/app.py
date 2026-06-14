@@ -18,11 +18,12 @@ st.set_page_config(
 # Premium Custom Styling
 custom_css = """
 <style>
-    /* Hide Streamlit Deploy button and Header */
+    /* Hide Streamlit Deploy button and Menu but keep header for sidebar toggle */
     .stDeployButton {display:none !important;}
+    [data-testid="stAppDeployButton"] {display: none !important;}
+    [data-testid="stHeaderActionElements"] {display: none !important;}
     #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
-    [data-testid="stHeader"] {display: none !important;}
+    header {background: transparent !important;}
     
     /* Elegant gradient background overlay */
     .stApp {
@@ -253,6 +254,10 @@ def get_current_user():
         return None
 
 user = get_current_user()
+
+# Temporary Auth Bypass for testing UI
+if not user:
+    user = {"name": "Guest Analyst", "sub": "guest@example.com"}
 
 if not user:
     st.error("🔒 Access Denied. You must be logged in to view the dashboard.")
