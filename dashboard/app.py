@@ -235,6 +235,7 @@ load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY", "fallback-secret-for-development-only")
 ALGORITHM = "HS256"
+AUTH_URL = os.getenv("AUTH_URL", "http://localhost:8000").rstrip("/")
 
 def get_current_user():
     # Streamlit 1.35+ supports context.cookies
@@ -255,13 +256,9 @@ def get_current_user():
 
 user = get_current_user()
 
-# Temporary Auth Bypass for testing UI
-if not user:
-    user = {"name": "Guest Analyst", "sub": "guest@example.com"}
-
 if not user:
     st.error("🔒 Access Denied. You must be logged in to view the dashboard.")
-    st.markdown('<a href="http://localhost:8000/login" target="_self"><button style="background-color:#2563eb;color:white;padding:10px 20px;border-radius:5px;border:none;cursor:pointer;">Go to Login</button></a>', unsafe_allow_html=True)
+    st.markdown(f'<a href="{AUTH_URL}/login" target="_self"><button style="background-color:#2563eb;color:white;padding:10px 20px;border-radius:5px;border:none;cursor:pointer;">Go to Login</button></a>', unsafe_allow_html=True)
     st.stop()
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -306,16 +303,21 @@ def compute_metrics_cached():
 #  UI LAYOUT & NAVIGATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Sidebar: resolve user name and initials from JWT
+_user_name = user.get('name', 'Analyst') if user else 'Analyst'
+_user_email = user.get('sub', '') if user else ''
+_initials = ''.join(w[0].upper() for w in _user_name.split()[:2]) if _user_name else 'AN'
+
 st.sidebar.markdown(f"""
 <div class="sidebar-header">
     <div class="user-profile">
-        <div class="avatar">PN</div>
+        <div class="avatar">{_initials}</div>
         <div class="user-info">
-            <span class="user-name">Prathmesh Nanda</span>
+            <span class="user-name">{_user_name}</span>
             <span class="user-role">Analyst</span>
         </div>
     </div>
-    <a href="http://localhost:8000/logout" target="_self" class="logout-btn" title="Logout">
+    <a href="{AUTH_URL}/logout" target="_self" class="logout-btn" title="Logout">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
     </a>
 </div>
@@ -357,27 +359,36 @@ if "Market Overview" in page:
 
     st.markdown("---")
     
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("SIP Inflows Timeline")
+    def get_market_overview_figs():
+        figs = {}
         sip_trend = load_data("SELECT month_year, total_sip_inflow_cr FROM fact_sip ORDER BY month_year")
         if not sip_trend.empty:
             fig_sip = px.line(sip_trend, x="month_year", y="total_sip_inflow_cr", title="Monthly SIP Inflows (Cr)")
             fig_sip.add_hline(y=31002, line_dash="dash", annotation_text="Milestone (Dec 2025)", line_color="green")
-            st.plotly_chart(fig_sip, use_container_width=True)
+            figs['sip'] = fig_sip
+
+        folio_trend = load_data("SELECT month_year as date, total_folios_crore FROM fact_folio ORDER BY date")
+        if not folio_trend.empty:
+            figs['folio'] = px.line(folio_trend, x="date", y="total_folios_crore", title="Industry Folio Growth (Crores)")
+
+        flows_df = load_data("SELECT category, sum(net_inflow_crore) as net_inflows FROM fact_category_inflows GROUP BY category ORDER BY net_inflows DESC")
+        if not flows_df.empty:
+            figs['flows'] = px.bar(flows_df, x="category", y="net_inflows", color="net_inflows", color_continuous_scale="Viridis")
+        return figs
+
+    mo_figs = get_market_overview_figs()
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.subheader("SIP Inflows Timeline")
+        if 'sip' in mo_figs: st.plotly_chart(mo_figs['sip'], use_container_width=True)
 
     with c2:
         st.subheader("Folio Count Growth")
-        folio_trend = load_data("SELECT month_year as date, total_folios_crore FROM fact_folio ORDER BY date")
-        if not folio_trend.empty:
-            fig_folio = px.line(folio_trend, x="date", y="total_folios_crore", title="Industry Folio Growth (Crores)")
-            st.plotly_chart(fig_folio, use_container_width=True)
+        if 'folio' in mo_figs: st.plotly_chart(mo_figs['folio'], use_container_width=True)
 
     st.subheader("Category-wise Net Flows (FY 2024-25)")
-    flows_df = load_data("SELECT category, sum(net_inflow_crore) as net_inflows FROM fact_category_inflows GROUP BY category ORDER BY net_inflows DESC")
-    if not flows_df.empty:
-        fig_flows = px.bar(flows_df, x="category", y="net_inflows", color="net_inflows", color_continuous_scale="Viridis")
-        st.plotly_chart(fig_flows, use_container_width=True)
+    if 'flows' in mo_figs: st.plotly_chart(mo_figs['flows'], use_container_width=True)
 
 
 # -------------------------------------------------------------------------------
@@ -390,34 +401,41 @@ elif "Fund Performance & Risk" in page:
     with st.spinner("Computing metrics from database..."):
         metrics_df = compute_metrics_cached()
     
+    def get_perf_risk_figs(metrics):
+        figs = {}
+        if 'sharpe_ratio' in metrics.columns and 'sortino_ratio' in metrics.columns:
+            figs['scatter'] = px.scatter(metrics, x="sharpe_ratio", y="sortino_ratio", hover_name="scheme_name",
+                                     color="category", title="Risk-Adjusted Returns (Higher is better)")
+        if 'max_drawdown' in metrics.columns:
+            dd_df = metrics.sort_values('max_drawdown').head(15)
+            figs['dd'] = px.bar(dd_df, x="max_drawdown", y="scheme_name", orientation='h', 
+                             title="Lowest Maximum Drawdowns", color="max_drawdown", color_continuous_scale="Reds_r")
+        alpha_df = metrics.sort_values('alpha', ascending=False).head(10)
+        figs['alpha'] = px.bar(alpha_df, x="alpha", y="scheme_name", orientation='h', color="category", title="Top 10 Funds by Alpha (vs Nifty 100)")
+        fig_beta = px.histogram(metrics, x="beta", color="category", nbins=20, title="Beta vs Nifty 100")
+        fig_beta.add_vline(x=1.0, line_dash="dash", annotation_text="Market Beta = 1")
+        figs['beta'] = fig_beta
+        return figs
+
+    pr_figs = get_perf_risk_figs(metrics_df)
+
     c1, c2 = st.columns(2)
     with c1:
         st.subheader("Sharpe vs Sortino Ratio")
-        if 'sharpe_ratio' in metrics_df.columns and 'sortino_ratio' in metrics_df.columns:
-            fig_scatter = px.scatter(metrics_df, x="sharpe_ratio", y="sortino_ratio", hover_name="scheme_name",
-                                     color="category", title="Risk-Adjusted Returns (Higher is better)")
-            st.plotly_chart(fig_scatter, use_container_width=True)
+        if 'scatter' in pr_figs: st.plotly_chart(pr_figs['scatter'], use_container_width=True)
             
     with c2:
         st.subheader("Maximum Drawdown")
-        if 'max_drawdown' in metrics_df.columns:
-            dd_df = metrics_df.sort_values('max_drawdown').head(15)
-            fig_bar = px.bar(dd_df, x="max_drawdown", y="scheme_name", orientation='h', 
-                             title="Lowest Maximum Drawdowns", color="max_drawdown", color_continuous_scale="Reds_r")
-            st.plotly_chart(fig_bar, use_container_width=True)
+        if 'dd' in pr_figs: st.plotly_chart(pr_figs['dd'], use_container_width=True)
 
     c3, c4 = st.columns(2)
     with c3:
         st.subheader("Fund Ranking by Alpha")
-        alpha_df = metrics_df.sort_values('alpha', ascending=False).head(10)
-        fig_alpha = px.bar(alpha_df, x="alpha", y="scheme_name", orientation='h', color="category", title="Top 10 Funds by Alpha (vs Nifty 100)")
-        st.plotly_chart(fig_alpha, use_container_width=True)
+        if 'alpha' in pr_figs: st.plotly_chart(pr_figs['alpha'], use_container_width=True)
         
     with c4:
         st.subheader("Beta Distribution")
-        fig_beta = px.histogram(metrics_df, x="beta", color="category", nbins=20, title="Beta vs Nifty 100")
-        fig_beta.add_vline(x=1.0, line_dash="dash", annotation_text="Market Beta = 1")
-        st.plotly_chart(fig_beta, use_container_width=True)
+        if 'beta' in pr_figs: st.plotly_chart(pr_figs['beta'], use_container_width=True)
 
 
 # -------------------------------------------------------------------------------
@@ -427,36 +445,44 @@ elif "Investor Demographics & Transactions" in page:
     st.title("👥 Investor Demographics & Transactions")
     st.markdown("Age/income distribution, city tiers, transaction mix (SIP/Lumpsum), and geographic footprint.")
     
+    def get_demographics_figs():
+        figs = {}
+        dem_df = load_data("SELECT age_group, annual_income_lakh as income_bracket, count(*) as tx_count FROM fact_transactions GROUP BY age_group, annual_income_lakh")
+        if not dem_df.empty:
+            figs['dem'] = px.density_heatmap(dem_df, x="age_group", y="income_bracket", z="tx_count", title="Transactions by Age & Income")
+            
+        tx_type_df = load_data("SELECT transaction_type, sum(amount_inr) as volume FROM fact_transactions GROUP BY transaction_type")
+        if not tx_type_df.empty:
+            figs['tx'] = px.pie(tx_type_df, values='volume', names='transaction_type', hole=0.4, title="Investment Modes by Volume")
+
+        tier_df = load_data("SELECT city_tier, count(*) as count FROM fact_transactions GROUP BY city_tier")
+        if not tier_df.empty:
+            figs['tier'] = px.pie(tier_df, values='count', names='city_tier', title="Tier 1 vs Tier 2/3 Penetration")
+            
+        state_tx = load_data("SELECT state, sum(amount_inr) as redemption FROM fact_transactions WHERE transaction_type='Redemption' GROUP BY state ORDER BY redemption DESC")
+        if not state_tx.empty:
+            figs['state'] = px.bar(state_tx, x="redemption", y="state", orientation='h', title="Total Redemptions by State", color="redemption", color_continuous_scale="Reds")
+        return figs
+
+    demo_figs = get_demographics_figs()
+
     c1, c2 = st.columns(2)
     with c1:
         st.subheader("Age vs Income Distribution")
-        dem_df = load_data("SELECT age_group, annual_income_lakh as income_bracket, count(*) as tx_count FROM fact_transactions GROUP BY age_group, annual_income_lakh")
-        if not dem_df.empty:
-            fig_dem = px.density_heatmap(dem_df, x="age_group", y="income_bracket", z="tx_count", title="Transactions by Age & Income")
-            st.plotly_chart(fig_dem, use_container_width=True)
+        if 'dem' in demo_figs: st.plotly_chart(demo_figs['dem'], use_container_width=True)
             
     with c2:
         st.subheader("Transaction Mix (SIP vs Lumpsum vs SWP)")
-        tx_type_df = load_data("SELECT transaction_type, sum(amount_inr) as volume FROM fact_transactions GROUP BY transaction_type")
-        if not tx_type_df.empty:
-            fig_pie = px.pie(tx_type_df, values='volume', names='transaction_type', hole=0.4, title="Investment Modes by Volume")
-            st.plotly_chart(fig_pie, use_container_width=True)
+        if 'tx' in demo_figs: st.plotly_chart(demo_figs['tx'], use_container_width=True)
 
     c3, c4 = st.columns(2)
     with c3:
         st.subheader("City Tier Breakdown")
-        tier_df = load_data("SELECT city_tier, count(*) as count FROM fact_transactions GROUP BY city_tier")
-        if not tier_df.empty:
-            fig_tier = px.pie(tier_df, values='count', names='city_tier', title="Tier 1 vs Tier 2/3 Penetration")
-            st.plotly_chart(fig_tier, use_container_width=True)
+        if 'tier' in demo_figs: st.plotly_chart(demo_figs['tier'], use_container_width=True)
             
     with c4:
         st.subheader("State-wise Redemption Patterns")
-        # Pseudo-choropleth via horizontal bar due to geojson limitations
-        state_tx = load_data("SELECT state, sum(amount_inr) as redemption FROM fact_transactions WHERE transaction_type='Redemption' GROUP BY state ORDER BY redemption DESC")
-        if not state_tx.empty:
-            fig_state = px.bar(state_tx, x="redemption", y="state", orientation='h', title="Total Redemptions by State", color="redemption", color_continuous_scale="Reds")
-            st.plotly_chart(fig_state, use_container_width=True)
+        if 'state' in demo_figs: st.plotly_chart(demo_figs['state'], use_container_width=True)
 
 
 # -------------------------------------------------------------------------------
@@ -470,28 +496,33 @@ elif "Portfolio Holdings & Sector Exposure" in page:
     selected_fund = st.selectbox("Select Fund for Portfolio View:", funds['scheme_name'])
     amfi_code = funds[funds['scheme_name'] == selected_fund]['amfi_code'].iloc[0]
     
-    holdings_df = load_data("SELECT * FROM fact_holdings WHERE amfi_code=:amfi_code", {"amfi_code": int(amfi_code)})
+    def get_portfolio_figs(amfi):
+        holdings = load_data(f"SELECT * FROM fact_holdings WHERE amfi_code={amfi}")
+        if holdings.empty: return None, None
+        figs = {}
+        figs['sun'] = px.sunburst(holdings, path=['sector', 'stock_name'], values='weight_pct', title="Holdings Breakdown")
+        top10 = holdings.sort_values('weight_pct', ascending=False).head(10)
+        figs['bar'] = px.bar(top10, x="weight_pct", y="stock_name", orientation='h', color="sector", title="Top 10 Stocks by Weight %")
+        sector_grp = holdings.groupby('sector')['weight_pct'].sum().reset_index().sort_values('weight_pct', ascending=False)
+        figs['tree'] = px.treemap(sector_grp, path=[px.Constant("All Sectors"), 'sector'], values='weight_pct', title="Sector Allocation Treemap")
+        return holdings, figs
+
+    holdings_df, pf_figs = get_portfolio_figs(int(amfi_code))
     
-    if holdings_df.empty:
+    if holdings_df is None or holdings_df.empty:
         st.warning("No holdings data available for this fund.")
     else:
         c1, c2 = st.columns(2)
         with c1:
             st.subheader("Sector vs Stock Exposure (Sunburst)")
-            # Sunburst: Fund -> Sector -> Stock
-            fig_sun = px.sunburst(holdings_df, path=['sector', 'stock_name'], values='weight_pct', title=f"{selected_fund} Holdings Breakdown")
-            st.plotly_chart(fig_sun, use_container_width=True)
+            if 'sun' in pf_figs: st.plotly_chart(pf_figs['sun'], use_container_width=True)
             
         with c2:
             st.subheader("Top 10 Holdings")
-            top10 = holdings_df.sort_values('weight_pct', ascending=False).head(10)
-            fig_bar = px.bar(top10, x="weight_pct", y="stock_name", orientation='h', color="sector", title="Top 10 Stocks by Weight %")
-            st.plotly_chart(fig_bar, use_container_width=True)
+            if 'bar' in pf_figs: st.plotly_chart(pf_figs['bar'], use_container_width=True)
             
         st.subheader("Sector Concentration")
-        sector_grp = holdings_df.groupby('sector')['weight_pct'].sum().reset_index().sort_values('weight_pct', ascending=False)
-        fig_sec = px.treemap(sector_grp, path=[px.Constant("All Sectors"), 'sector'], values='weight_pct', title="Sector Allocation Treemap")
-        st.plotly_chart(fig_sec, use_container_width=True)
+        if 'tree' in pf_figs: st.plotly_chart(pf_figs['tree'], use_container_width=True)
 
 
 # -------------------------------------------------------------------------------

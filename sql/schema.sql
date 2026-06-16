@@ -1,8 +1,10 @@
 -- ============================================================
--- Bluestock Mutual Fund Analysis — SQLite Star Schema
+-- Bluestock Mutual Fund Analysis — PostgreSQL Star Schema
 -- ============================================================
--- Run: python -c "from scripts.etl_pipeline import *; load_schema(create_engine('sqlite:///data/db/bluestock_mf.db'))"
--- Or:  sqlite3 data/db/bluestock_mf.db < sql/schema.sql
+-- Neon DB (PostgreSQL) — run via ETL pipeline:
+--   python run_pipeline.py --phase 2
+-- Or apply directly:
+--   psql $DB_URI_NON_POOLED -f sql/schema.sql
 -- ============================================================
 
 -- ============================================================
@@ -73,6 +75,7 @@ CREATE TABLE IF NOT EXISTS fact_transactions (
     city_tier           TEXT    CHECK(city_tier IN ('T30', 'B30')),
     age_group           TEXT,
     gender              TEXT    CHECK(gender IN ('Male', 'Female', 'Other', 'M', 'F')),
+    annual_income_lakh  REAL,
     FOREIGN KEY(amfi_code) REFERENCES dim_fund(amfi_code)
 );
 

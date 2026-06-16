@@ -30,10 +30,16 @@ from auth_gateway.auth import (
 
 app = FastAPI()
 
-# Setup CORS
+# Setup CORS — origins loaded from env var (comma-separated list)
+_raw_origins = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:8501,http://127.0.0.1:8501,http://localhost:5173,http://127.0.0.1:5173"
+)
+ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8501", "http://127.0.0.1:8501", "http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,7 +55,7 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 app.mount("/static", StaticFiles(directory="auth_gateway/static"), name="static")
 templates = Jinja2Templates(directory="auth_gateway/templates")
 
-STREAMLIT_URL = "http://localhost:8501"
+STREAMLIT_URL = os.getenv("STREAMLIT_URL", "http://localhost:8501").rstrip("/")
 IS_PRODUCTION = os.getenv("ENVIRONMENT", "development").lower() == "production"
 
 # --- Google OAuth Setup ---
@@ -207,11 +213,18 @@ async def forgot_password(
         db.add(reset)
         db.commit()
         
-        reset_link = f"http://localhost:8000/reset-password?token={token}"
+        auth_base_url = os.getenv("AUTH_BASE_URL", "http://localhost:8000").rstrip("/")
+        reset_link = f"{auth_base_url}/reset-password?token={token}"
         send_email(
             to_email=email,
-            subject="Password Reset Request",
-            body=f"Click the link to reset your password: {reset_link}"
+            subject="Password Reset — Bluestock MF Analytics",
+            body=(
+                f"Hello,\n\n"
+                f"You requested a password reset for your Bluestock MF Analytics account.\n\n"
+                f"Click the link below to reset your password (expires in 1 hour):\n"
+                f"{reset_link}\n\n"
+                f"If you did not request this, please ignore this email."
+            )
         )
         
     return templates.TemplateResponse(request=request, name="forgot_password.html", context={
@@ -320,7 +333,7 @@ async def google_auth_callback(request: Request, db: Session = Depends(get_db)):
         httponly=True,
         samesite="lax",
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        secure=False
+        secure=IS_PRODUCTION
     )
     return response
 

@@ -79,10 +79,10 @@ def phase_1_data_ingestion() -> bool:
 
 
 def phase_2_etl() -> bool:
-    """Phase 2: Clean data + load to SQLite."""
+    """Phase 2: Clean data + load to Neon DB (PostgreSQL)."""
     return run_script(
         BASE_DIR / "scripts" / "etl_pipeline.py",
-        "ETL Pipeline (Clean + Load SQLite)"
+        "ETL Pipeline (Clean + Load Neon DB)"
     )
 
 
@@ -137,7 +137,7 @@ def main() -> None:
 
     phases = {
         1: ("Day 1 — Data Ingestion", phase_1_data_ingestion),
-        2: ("Day 2 — ETL + SQLite Load", phase_2_etl),
+        2: ("Day 2 — ETL + Neon DB Load", phase_2_etl),
         3: ("Recommender Demo", phase_3_recommender_demo),
         4: ("Analytics Generation", phase_4_analytics),
     }

@@ -13,6 +13,7 @@ plotly>=5.22.0
 
 # Database
 sqlalchemy>=2.0.30
+psycopg2-binary>=2.9.9
 
 # API / HTTP
 requests>=2.31.0
