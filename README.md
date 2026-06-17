@@ -1,13 +1,13 @@
 # Bluestock Mutual Fund Analytics Capstone Project
 
-End-to-end data pipeline, analytics platform, and interactive dashboard for analyzing 40 mutual fund schemes over a 3-year period. Powered by a **Neon DB (PostgreSQL)** backend and a **FastAPI + Streamlit + React** tech stack.
+End-to-end data pipeline, analytics platform, and interactive dashboard for analyzing 40 mutual fund schemes over a 3-year period. Powered by a **Neon DB (PostgreSQL)** backend and a **FastAPI + Streamlit** tech stack.
 
 ## Project Structure
 
 ```
 ├── auth_gateway/       FastAPI auth backend (JWT, Google OAuth, password reset)
 ├── dashboard/          Streamlit multi-page analytics dashboard
-├── mainframe-landing/  React + Vite marketing landing page
+├── deploy/             Production deployment configs (Gunicorn, Nginx, deployment guide)
 ├── scripts/            Python ETL, metrics, recommender, notebook generation
 ├── sql/                PostgreSQL schema and analytical queries
 ├── data/
@@ -22,7 +22,6 @@ End-to-end data pipeline, analytics platform, and interactive dashboard for anal
 ## Prerequisites
 
 - Python 3.11+
-- Node.js 18+ (for the React landing page)
 - A [Neon DB](https://neon.tech) PostgreSQL database
 
 ## Setup Instructions
@@ -39,21 +38,21 @@ pip install -r requirements.txt
 
 Copy and fill in the root `.env` file:
 
-```bash
-# Already present — update the placeholders:
-ENVIRONMENT=production
+```env
+ENVIRONMENT=development
+
 SECRET_KEY=<generate with: python -c "import secrets; print(secrets.token_hex(32))">
 
 # Neon DB (PostgreSQL) — from your Neon console
 DB_URI_POOLED=postgresql://...
 DB_URI_NON_POOLED=postgresql://...
 
-# Deployment URLs
-AUTH_BASE_URL=http://localhost:8000   # Your FastAPI domain in production
-STREAMLIT_URL=http://localhost:8501   # Your Streamlit domain in production
+# Deployment URLs (update to your production URLs when deploying)
+AUTH_BASE_URL=http://localhost:8000
+STREAMLIT_URL=http://localhost:8501
 
 # CORS — comma-separated origins allowed to call the API
-ALLOWED_ORIGINS=http://localhost:8501,http://localhost:5173
+ALLOWED_ORIGINS=http://localhost:8501,http://127.0.0.1:8501
 
 # SMTP Email (for password reset emails)
 # Gmail: enable App Passwords at https://myaccount.google.com/apppasswords
@@ -63,7 +62,7 @@ SMTP_USERNAME=your-email@gmail.com
 SMTP_PASSWORD=your-app-password
 SMTP_FROM_EMAIL=your-email@gmail.com
 
-# Google OAuth
+# Google OAuth (optional)
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 ```
@@ -88,8 +87,14 @@ python run_pipeline.py --phase 4   # Phase 4: Generate EDA + analytics notebooks
 
 ### 5. Start the Auth Gateway (FastAPI)
 
+**Development:**
 ```bash
 uvicorn auth_gateway.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**Production (using Gunicorn + Uvicorn workers):**
+```bash
+gunicorn auth_gateway.main:app -c deploy/gunicorn.conf.py
 ```
 
 ### 6. Launch the Analytics Dashboard (Streamlit)
@@ -98,14 +103,11 @@ uvicorn auth_gateway.main:app --host 0.0.0.0 --port 8000 --reload
 streamlit run dashboard/app.py
 ```
 
-### 7. Start the Landing Page (React + Vite)
+Once both services are running, open your browser and go to **http://localhost:8000** to see the landing page. Log in or register to access the analytics dashboard at **http://localhost:8501**.
 
-```bash
-cd mainframe-landing
-cp .env.example .env          # Set VITE_AUTH_URL to your FastAPI URL
-npm install
-npm run dev
-```
+## Deployment
+
+For free and easy cloud deployment (no Linux, no domain required), see the **[Free Deployment Guide (Render + Streamlit Cloud)](deploy/README.md)**.
 
 ## Features
 
@@ -123,14 +125,15 @@ npm run dev
 pytest tests/ -v
 ```
 
+All **69 tests** should pass.
+
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
+|-------|------------|
 | Database | Neon DB (PostgreSQL) via psycopg2 + SQLAlchemy |
 | Auth Backend | FastAPI + python-jose (JWT) + Authlib (Google OAuth) |
 | Dashboard | Streamlit + Plotly |
-| Landing Page | React 19 + Vite + TailwindCSS v4 |
 | Data Pipeline | pandas + SQLAlchemy |
 | Analytics | scipy + numpy |
 | Email | smtplib (SMTP/TLS) |
