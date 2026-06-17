@@ -55,7 +55,8 @@ pytest>=8.2.0
 
 # API Backend / Auth (FastAPI)
 fastapi
-uvicorn
+uvicorn[standard]
+gunicorn
 python-jose[cryptography]
 authlib
 slowapi
