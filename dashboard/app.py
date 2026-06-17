@@ -235,7 +235,7 @@ load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY", "fallback-secret-for-development-only")
 ALGORITHM = "HS256"
-AUTH_URL = os.getenv("AUTH_URL", "http://localhost:8000").rstrip("/")
+AUTH_URL = os.getenv("AUTH_BASE_URL", "http://localhost:8000").rstrip("/")
 
 def get_current_user():
     # Streamlit 1.35+ supports context.cookies
