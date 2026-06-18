@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: mf_api
+    command: gunicorn auth_gateway.main:app -c deploy/gunicorn.conf.py
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    restart: always
+
+  dashboard:
+    build: .
+    container_name: mf_dashboard
+    command: streamlit run dashboard/app.py --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    depends_on:
+      - api
+    restart: always

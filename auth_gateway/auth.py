@@ -15,7 +15,9 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Secret keys and algorithms
-SECRET_KEY = os.getenv("SECRET_KEY", "fallback-secret-for-development-only")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable is not set. Please check your .env file.")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
