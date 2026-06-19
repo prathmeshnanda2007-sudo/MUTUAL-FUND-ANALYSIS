@@ -260,7 +260,7 @@ user = get_current_user()
 
 if not user:
     st.error("🔒 Access Denied. You must be logged in to view the dashboard.")
-    st.markdown(f'<a href="{AUTH_URL}/login" target="_self"><button style="background-color:#2563eb;color:white;padding:10px 20px;border-radius:5px;border:none;cursor:pointer;">Go to Login</button></a>', unsafe_allow_html=True)
+    st.markdown(f'<a href="{AUTH_URL}/login" target="_top"><button style="background-color:#2563eb;color:white;padding:10px 20px;border-radius:5px;border:none;cursor:pointer;">Go to Login</button></a>', unsafe_allow_html=True)
     st.stop()
 
 # ═══════════════════════════════════════════════════════════════════════════════
