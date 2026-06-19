@@ -240,10 +240,26 @@ ALGORITHM = "HS256"
 AUTH_URL = os.getenv("AUTH_BASE_URL", "http://localhost:8000").rstrip("/")
 
 def get_current_user():
-    # Streamlit 1.35+ supports context.cookies
-    # In older versions, you'd need extra-streamlit-components
-    cookies = st.context.cookies
-    token = cookies.get("access_token")
+    # 1. Read token from URL (passed by FastAPI across domains)
+    token = st.query_params.get("token")
+    if token:
+        # Inject Javascript to save the cookie on the Streamlit domain so it persists
+        st.components.v1.html(
+            f"""
+            <script>
+            document.cookie = "access_token=Bearer {token}; path=/; max-age=86400; samesite=lax; secure";
+            const url = new URL(window.top.location.href);
+            url.searchParams.delete('token');
+            window.top.history.replaceState({{}}, document.title, url);
+            </script>
+            """,
+            height=0
+        )
+    else:
+        # 2. If no URL param, read from cookies
+        cookies = st.context.cookies
+        token = cookies.get("access_token")
+
     if not token:
         return None
         

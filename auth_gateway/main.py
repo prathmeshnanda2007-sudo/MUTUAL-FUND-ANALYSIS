@@ -123,7 +123,8 @@ async def login(
         data={"sub": user.email, "name": user.full_name}, expires_delta=access_token_expires
     )
 
-    response = RedirectResponse(url=STREAMLIT_URL, status_code=status.HTTP_302_FOUND)
+    redirect_url = f"{STREAMLIT_URL}?token={access_token}" if STREAMLIT_URL else f"/?token={access_token}"
+    response = RedirectResponse(url=redirect_url, status_code=status.HTTP_302_FOUND)
     response.set_cookie(
         key="access_token",
         value=f"Bearer {access_token}",
@@ -326,7 +327,8 @@ async def google_auth_callback(request: Request, db: Session = Depends(get_db)):
         data={"sub": user.email, "name": user.full_name}, expires_delta=access_token_expires
     )
 
-    response = RedirectResponse(url=STREAMLIT_URL, status_code=status.HTTP_302_FOUND)
+    redirect_url = f"{STREAMLIT_URL}?token={access_token}" if STREAMLIT_URL else f"/?token={access_token}"
+    response = RedirectResponse(url=redirect_url, status_code=status.HTTP_302_FOUND)
     response.set_cookie(
         key="access_token",
         value=f"Bearer {access_token}",
